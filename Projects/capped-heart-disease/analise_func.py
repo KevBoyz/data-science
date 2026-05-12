@@ -8,13 +8,19 @@ from sklearn.preprocessing import (
     MinMaxScaler, StandardScaler, FunctionTransformer, OneHotEncoder,
 )
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold, GridSearchCV
-from ucimlrepo import fetch_ucirepo
+
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 import warnings
+from pathlib import Path
 warnings.filterwarnings("ignore")
+
+OUTPUT_DIR = Path("knn")
+
+# Precisa instalar ;0
+from ucimlrepo import fetch_ucirepo
 
 
 LABELS = {
@@ -78,7 +84,7 @@ def explorar_dados(df):
 def verificar_missing(df):
     """
     Verifica e imprime a quantidade de valores ausentes por coluna.
-    ca e thal possuem poucos missings — a imputação é feita dentro do pipeline
+    ca e thal possuem poucos missings - a imputação é feita dentro do pipeline
     de modelagem usando a moda do treino, evitando data leakage.
     """
     missing = df.isna().sum()
@@ -90,7 +96,7 @@ def verificar_missing(df):
 def plotar_outliers(df):
     """
     Plota box plots das variáveis contínuas para inspeção visual de outliers.
-    Outliers não são removidos pois os dados são confiáveis — a normalização
+    Outliers não são removidos pois os dados são confiáveis - a normalização
     é usada para mitigar o impacto deles no modelo.
     """
     cont_features = ['age', 'trestbps', 'chol', 'thalach', 'oldpeak']
@@ -102,9 +108,9 @@ def plotar_outliers(df):
         axes[i].set_ylabel('Valores')
     fig.suptitle('Box plot - Variáveis Contínuas', fontsize=14)
     plt.tight_layout()
-    plt.savefig('outliers_boxplot.png', dpi=150)
+    plt.savefig(OUTPUT_DIR / 'outliers_boxplot.png', dpi=150)
     plt.close()
-    print("[gráfico salvo: outliers_boxplot.png]")
+    print("salvo: outliers_boxplot.png")
 
 
 def binarizar_target(df):
@@ -133,7 +139,7 @@ def plotar_distribuicao_target(df):
     """
     target_counts = df['target'].value_counts().sort_index()
     labels = [
-        f'{i} — {"Sem doença" if i == 0 else f"Grau {i}"}' for i in target_counts.index]
+        f'{i} - {"Sem doença" if i == 0 else f"Grau {i}"}' for i in target_counts.index]
 
     fig, ax = plt.subplots(figsize=(7, 4))
     sns.barplot(
@@ -155,9 +161,9 @@ def plotar_distribuicao_target(df):
     ax.set_ylabel('Diagnóstico')
     sns.despine()
     plt.tight_layout()
-    plt.savefig('distribuicao_target.png', dpi=150)
+    plt.savefig(OUTPUT_DIR / 'distribuicao_target.png', dpi=150)
     plt.close()
-    print("[gráfico salvo: distribuicao_target.png]")
+    print("salvo: distribuicao_target.png")
 
 
 def plotar_variaveis_categoricas(df):
@@ -180,9 +186,9 @@ def plotar_variaveis_categoricas(df):
     fig.suptitle(
         'Distribuição das Variáveis Categóricas por Target', fontsize=14)
     plt.tight_layout()
-    plt.savefig('distribuicao_categoricas.png', dpi=150)
+    plt.savefig(OUTPUT_DIR / 'distribuicao_categoricas.png', dpi=150)
     plt.close()
-    print("[gráfico salvo: distribuicao_categoricas.png]")
+    print("salvo: distribuicao_categoricas.png")
 
 
 def plotar_variaveis_continuas(df):
@@ -201,9 +207,9 @@ def plotar_variaveis_continuas(df):
         axes[i].set_ylabel('Contagem')
     fig.suptitle('Distribuição das Variáveis Contínuas', fontsize=14)
     plt.tight_layout()
-    plt.savefig('distribuicao_continuas.png', dpi=150)
+    plt.savefig(OUTPUT_DIR / 'distribuicao_continuas.png', dpi=150)
     plt.close()
-    print("[gráfico salvo: distribuicao_continuas.png]")
+    print("salvo: distribuicao_continuas.png")
 
 
 # -------------------------------------------------------
@@ -232,9 +238,9 @@ def plotar_correlacao(df):
     )
     ax.set_title('Correlação entre Todas as Variáveis', fontsize=14)
     plt.tight_layout()
-    plt.savefig('heatmap_correlacao.png', dpi=150)
+    plt.savefig(OUTPUT_DIR / 'heatmap_correlacao.png', dpi=150)
     plt.close()
-    print("[gráfico salvo: heatmap_correlacao.png]")
+    print("salvo: heatmap_correlacao.png")
 
 
 def selecionar_features(df):
@@ -322,7 +328,7 @@ def dividir_e_escalonar(X, y):
 
 
 # -------------------------------------------------------
-# 7. Treinamento — split simples
+# 7. Treinamento - split simples
 # -------------------------------------------------------
 
 def treinar_split(X_scaled, y_train, y_test, k_range):
@@ -353,11 +359,11 @@ def treinar_split(X_scaled, y_train, y_test, k_range):
         )
     ax.set_xlabel('k')
     ax.set_ylabel('Acurácia')
-    ax.set_title('Treino padrão — Acurácia por K com diferentes normalizações')
+    ax.set_title('Treino padrão - Acurácia por K com diferentes normalizações')
     ax.legend()
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig('treino_split.png', dpi=150)
+    plt.savefig(OUTPUT_DIR / 'treino_split.png', dpi=150)
     plt.close()
     print("[gráfico salvo: treino_split.png]")
 
@@ -373,7 +379,7 @@ def treinar_cv(X_train, y_train, scalers, k_range):
     Aplica validação cruzada estratificada (5-fold) para cada valor de k
     e para cada normalização usando um Pipeline completo (prep + KNN).
     O pipeline garante que a transformação é ajustada apenas nos folds de treino.
-    Resultados mais baixos que o split simples são esperados — são mais confiáveis.
+    Resultados mais baixos que o split simples são esperados - são mais confiáveis.
     Retorna dicionário com médias de acurácia por normalização.
     """
     kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=18)
@@ -403,13 +409,13 @@ def treinar_cv(X_train, y_train, scalers, k_range):
     ax.set_xlabel('k')
     ax.set_ylabel('Acurácia (CV 5-fold)')
     ax.set_title(
-        'Validação cruzada — Acurácia por K com diferentes normalizações')
+        'Validação cruzada - Acurácia por K com diferentes normalizações')
     ax.legend()
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig('treino_cv.png', dpi=150)
+    plt.savefig(OUTPUT_DIR / 'treino_cv.png', dpi=150)
     plt.close()
-    print("[gráfico salvo: treino_cv.png]")
+    print("salvo: treino_cv.png")
 
     return cv_results, kfold
 
@@ -454,7 +460,7 @@ def grid_search(X_train, X_test, y_train, y_test, scalers, kfold):
 
 
 # -------------------------------------------------------
-# 10. Melhor modelo — avaliação final
+# 10. Melhor modelo - avaliação final
 # -------------------------------------------------------
 
 def avaliar_melhor_modelo(X_train, X_test, y_train, y_test, scalers, gs_results):
@@ -487,13 +493,13 @@ def avaliar_melhor_modelo(X_train, X_test, y_train, y_test, scalers, gs_results)
     ConfusionMatrixDisplay.from_predictions(
         y_test, y_pred, ax=ax, colorbar=False)
     ax.set_title(
-        f"Matriz de Confusão — {best_norm_name} "
+        f"Matriz de Confusão - {best_norm_name} "
         f"(k={best_gs['melhor_k']}, {best_gs['metric']})"
     )
     plt.tight_layout()
-    plt.savefig('matriz_confusao.png', dpi=150)
+    plt.savefig(OUTPUT_DIR / 'matriz_confusao.png', dpi=150)
     plt.close()
-    print("[gráfico salvo: matriz_confusao.png]")
+    print("salvo: matriz_confusao.png")
 
     return pipe_best, y_pred
 
@@ -535,14 +541,14 @@ def comparar_abordagens(scalers, k_range, X_train, X_test, y_train, y_test,
         gs = gs_results[name]
         rows.append({
             'normalização': name,
-            'split_k':    sp['melhor_k'],
-            'split_acc':  sp['acc'],
-            'cv_k':       cv_b['melhor_k'],
-            'cv_acc':     cv_b['acc'],
-            'gs_k':       gs['melhor_k'],
-            'gs_metric':  gs['metric'],
+            'split_k': sp['melhor_k'],
+            'split_acc': sp['acc'],
+            'cv_k': cv_b['melhor_k'],
+            'cv_acc': cv_b['acc'],
+            'gs_k': gs['melhor_k'],
+            'gs_metric': gs['metric'],
             'gs_weights': gs['weights'],
-            'gs_cv_acc':  gs['cv_acc'],
+            'gs_cv_acc': gs['cv_acc'],
             'gs_test_acc': gs['test_acc'],
         })
 
@@ -558,6 +564,8 @@ def comparar_abordagens(scalers, k_range, X_train, X_test, y_train, y_test,
 
 def main():
     """Executa o pipeline completo de classificação com KNN."""
+
+    OUTPUT_DIR.mkdir(exist_ok=True)
 
     df = carregar_dados()
     explorar_dados(df)
@@ -584,7 +592,7 @@ def main():
     comparar_abordagens(scalers, k_range, X_train, X_test,
                         y_train, y_test, cv_results, gs_results)
 
-    print("\nConcluído!")
+    print("\nConcluído")
 
 
 if __name__ == "__main__":
