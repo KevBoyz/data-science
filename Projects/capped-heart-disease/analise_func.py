@@ -5,7 +5,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import (
-    MinMaxScaler, StandardScaler, FunctionTransformer, OneHotEncoder,
+    MinMaxScaler, StandardScaler, FunctionTransformer, OneHotEncoder, PowerTransformer,
 )
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold, GridSearchCV
 
@@ -265,7 +265,54 @@ def selecionar_features(df):
 
 
 # -------------------------------------------------------
-# 6. Preparação para modelagem
+# 6. Transformações nas variáveis contínuas
+# -------------------------------------------------------
+
+def plotar_continuas_transformadas(df, X_train, X_test):
+    """
+    Aplica transformações nas variáveis contínuas e plota as distribuições resultantes.
+    log10 para trestbps e chol; log10(x+1) para oldpeak (tem zeros); PowerTransformer
+    para thalach. Fit exclusivamente no treino para evitar data leakage.
+    """
+    cont_cols_plot = ['age', 'trestbps', 'chol', 'thalach', 'oldpeak']
+
+    df_train_t = df.loc[X_train.index, cont_cols_plot].copy()
+    df_test_t  = df.loc[X_test.index,  cont_cols_plot].copy()
+
+    log10_tr = FunctionTransformer(func=np.log10, validate=False)
+    df_train_t['trestbps'] = log10_tr.fit_transform(df_train_t[['trestbps']])
+    df_test_t['trestbps']  = log10_tr.transform(df_test_t[['trestbps']])
+
+    log10_ch = FunctionTransformer(func=np.log10, validate=False)
+    df_train_t['chol'] = log10_ch.fit_transform(df_train_t[['chol']])
+    df_test_t['chol']  = log10_ch.transform(df_test_t[['chol']])
+
+    log10_shift = FunctionTransformer(func=lambda x: np.log10(x + 1), validate=False)
+    df_train_t['oldpeak'] = log10_shift.fit_transform(df_train_t[['oldpeak']])
+    df_test_t['oldpeak']  = log10_shift.transform(df_test_t[['oldpeak']])
+
+    pt = PowerTransformer()
+    df_train_t['thalach'] = pt.fit_transform(df_train_t[['thalach']])
+    df_test_t['thalach']  = pt.transform(df_test_t[['thalach']])
+
+    df_transformed = pd.concat([df_train_t, df_test_t]).sort_index()
+
+    fig, axes = plt.subplots(1, 5, figsize=(18, 4))
+    for i, col in enumerate(cont_cols_plot):
+        sns.histplot(data=df_transformed, x=col, kde=True,
+                     ax=axes[i], color='steelblue', alpha=0.7)
+        axes[i].set_title(LABELS.get(col, col))
+        axes[i].set_xlabel('')
+        axes[i].set_ylabel('Contagem')
+    fig.suptitle('Distribuição das Variáveis Contínuas (após transformações)', fontsize=14)
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / 'distribuicao_continuas_transformadas.png', dpi=150)
+    plt.close()
+    print("salvo: distribuicao_continuas_transformadas.png")
+
+
+# -------------------------------------------------------
+# 7. Preparação para modelagem
 # -------------------------------------------------------
 
 def build_ct(norm):
@@ -328,7 +375,7 @@ def dividir_e_escalonar(X, y):
 
 
 # -------------------------------------------------------
-# 7. Treinamento - split simples
+# 8. Treinamento - split simples
 # -------------------------------------------------------
 
 def treinar_split(X_scaled, y_train, y_test, k_range):
@@ -371,7 +418,7 @@ def treinar_split(X_scaled, y_train, y_test, k_range):
 
 
 # -------------------------------------------------------
-# 8. Validação cruzada
+# 9. Validação cruzada
 # -------------------------------------------------------
 
 def treinar_cv(X_train, y_train, scalers, k_range):
@@ -421,7 +468,7 @@ def treinar_cv(X_train, y_train, scalers, k_range):
 
 
 # -------------------------------------------------------
-# 9. Grid Search
+# 10. Grid Search
 # -------------------------------------------------------
 
 def grid_search(X_train, X_test, y_train, y_test, scalers, kfold):
@@ -460,7 +507,7 @@ def grid_search(X_train, X_test, y_train, y_test, scalers, kfold):
 
 
 # -------------------------------------------------------
-# 10. Melhor modelo - avaliação final
+# 11. Melhor modelo - avaliação final
 # -------------------------------------------------------
 
 def avaliar_melhor_modelo(X_train, X_test, y_train, y_test, scalers, gs_results):
@@ -505,7 +552,7 @@ def avaliar_melhor_modelo(X_train, X_test, y_train, y_test, scalers, gs_results)
 
 
 # -------------------------------------------------------
-# 11. Comparação: Split vs CV vs Grid Search
+# 12. Comparação: Split vs CV vs Grid Search
 # -------------------------------------------------------
 
 def comparar_abordagens(scalers, k_range, X_train, X_test, y_train, y_test,
@@ -582,6 +629,8 @@ def main():
 
     X_train, X_test, y_train, y_test, X_scaled, scalers, k_range = dividir_e_escalonar(
         X, y)
+
+    plotar_continuas_transformadas(df, X_train, X_test)
 
     split_results = treinar_split(X_scaled, y_train, y_test, k_range)
     cv_results, kfold = treinar_cv(X_train, y_train, scalers, k_range)
