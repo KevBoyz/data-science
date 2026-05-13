@@ -115,8 +115,8 @@ def plotar_outliers(df):
 
 def binarizar_target(df):
     """
-    Converte o target de múltiplas classes (0–4) para binário (0 ou 1).
-    O dataset original tem alto desbalanceamento entre as classes 1–4,
+    Converte o target de múltiplas classes (0-4) para binário (0 ou 1).
+    O dataset original tem alto desbalanceamento entre as classes 1-4,
     e o KNN tende a favorecer a classe majoritária (0). A binarização
     aproxima a distribuição: 164 saudáveis vs 139 doentes.
     """
@@ -133,7 +133,7 @@ def binarizar_target(df):
 
 def plotar_distribuicao_target(df):
     """
-    Plota a distribuição do target original (0–4) em barras horizontais.
+    Plota a distribuição do target original (0-4) em barras horizontais.
     Chamada ANTES da binarização para mostrar o desbalanceamento entre as 5 classes,
     que motiva a decisão de binarizar antes de treinar o KNN.
     """
@@ -380,7 +380,7 @@ def dividir_e_escalonar(X, y):
 
 def treinar_split(X_scaled, y_train, y_test, k_range):
     """
-    Treina KNN para cada valor de k (1–29) e para cada normalização,
+    Treina KNN para cada valor de k (1-29) e para cada normalização,
     avaliando a acurácia no conjunto de teste (split simples).
     Plota curva de acurácia por k e destaca o melhor ponto de cada normalização.
     Retorna dicionário com as acurácias por normalização.
