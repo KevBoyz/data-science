@@ -24,4 +24,5 @@ dependencies = [
     "statsmodels>=0.14.6",
     "tqdm>=4.68.4",
     "xgboost>=3.3.0",
+    "yellowbrick>=1.5",
 ]
