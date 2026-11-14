@@ -1,7 +1,10 @@
 import numpy as np
+import pandas as pd
 
 np.random.seed(123)
 
+
+# Funções de ativação
 
 def sigmoid(u):
     return 1 / (1 + np.exp(-u))
@@ -19,8 +22,18 @@ def leaky_relu(u, alpha=0.01):
     return np.where(u > 0, u, alpha * u)
 
 
+# Funções de perda
+
 def quadratic_error(output: np.array, desirable: np.array):
     return (output - desirable) ** 2
+
+
+# Otimizadores
+
+def batch_gd():
+    ...
+
+
 
 
 def hard_derivate(func, x, appr=4, eps=1e-8):
@@ -35,7 +48,7 @@ def hard_derivate(func, x, appr=4, eps=1e-8):
 
 
 class MLP:
-    def __init__(self, layers: list, loss: callable):
+    def __init__(self, layers: list, loss: callable, eta=0.1):
         self.layers = layers
         self.loss = loss
 
@@ -49,6 +62,7 @@ class MLP:
 
     def calulate_loss(self, output, desireble):
         return self.loss(output, desireble)
+
 
     def calculate_deltas(self, foward_results, desirable):
         deltas = []
@@ -71,9 +85,7 @@ class MLP:
             )
         return list(reversed(deltas))
 
-    def calculate_gradients(self, input, desirable):
-        foward_results = self.foward(input)
-        deltas = self.calculate_deltas(foward_results, desirable)
+    def calculate_gradients(self, input, foward_results, deltas):
         gradients = []
         gradients.append(
             deltas[0] @ input.T
@@ -86,6 +98,14 @@ class MLP:
             except IndexError:
                 pass
         return gradients
+
+    def backprogapation(self, input, desirable):
+        foward_results = self.foward(input)
+        deltas = self.calculate_deltas(foward_results, desirable)
+        gradients = self.calculate_gradients(input, foward_results, deltas)
+
+        df = pd.DataFrame([foward_results, deltas, gradients])
+        print(df.head(10))
         
 
 class Layer:
@@ -135,4 +155,4 @@ mlp = MLP(
     loss=quadratic_error
 )
 
-print(mlp.calculate_gradients(X, Y))
+mlp.backprogapation(X, Y)
