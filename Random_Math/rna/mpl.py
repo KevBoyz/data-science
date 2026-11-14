@@ -50,8 +50,7 @@ class MLP:
     def calulate_loss(self, output, desireble):
         return self.loss(output, desireble)
 
-    def calculate_deltas(self, input, desirable):
-        foward_results = self.foward(input)
+    def calculate_deltas(self, foward_results, desirable):
         deltas = []
         # fixar desirable e chamar passando somente x
         loss_fixed = lambda out: self.loss(out, desirable)
@@ -70,12 +69,24 @@ class MLP:
                 (self.layers[back_layer_i].weights.T @ deltas[-1]) *
                 hard_derivate(layer.activation, foward_results[actual_layer_i]['potencials'])
             )
-        return deltas
+        return list(reversed(deltas))
 
-    def calculate_gradients(self, deltas):
+    def calculate_gradients(self, input, desirable):
+        foward_results = self.foward(input)
+        deltas = self.calculate_deltas(foward_results, desirable)
         gradients = []
-
-
+        gradients.append(
+            deltas[0] @ input.T
+        )
+        for i, layer in enumerate(self.layers[0:]):
+            try:  # Pular o primeiro delta já usado
+                gradients.append(
+                    deltas[i+1] @ foward_results[i]['activations'].T
+                )
+            except IndexError:
+                pass
+        return gradients
+        
 
 class Layer:
     def __init__(self, activation: callable, features_in: int = None, features_out: int = None,
@@ -124,4 +135,4 @@ mlp = MLP(
     loss=quadratic_error
 )
 
-print(mlp.calculate_deltas(X, Y))
+print(mlp.calculate_gradients(X, Y))
