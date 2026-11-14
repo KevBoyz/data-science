@@ -104,9 +104,44 @@ class MLP:
         deltas = self.calculate_deltas(foward_results, desirable)
         gradients = self.calculate_gradients(input, foward_results, deltas)
 
-        df = pd.DataFrame([foward_results, deltas, gradients])
-        print(df.head(10))
-        
+        fmt = '{:.6f}'.format
+        amostras = [str(tuple(int(v) for v in x)) for x in input.T]
+
+        # tabela 1: valores de cada neurônio em cada amostra (colunas = amostras)
+        index, rows = [], []
+        for c, (result, delta) in enumerate(zip(foward_results, deltas), start=1):
+            valores = [('u', result['potencials']), ('y', result['activations'])]
+            if c == len(self.layers):
+                valores += [('d', desirable),
+                            ('E', self.loss(result['activations'], desirable))]
+            valores.append(('delta', delta))
+            for nome, matriz in valores:
+                for n, linha in enumerate(matriz, start=1):
+                    index.append((c, nome, n))
+                    rows.append(linha)
+        por_amostra = pd.DataFrame(
+            rows,
+            index=pd.MultiIndex.from_tuples(index, names=['camada', 'valor', 'neurônio']),
+            columns=amostras
+        )
+
+        # tabela 2: gradiente de cada peso (linha = neurônio, coluna = entrada)
+        index, rows = [], []
+        for c, grad in enumerate(gradients, start=1):
+            for n, linha in enumerate(grad, start=1):
+                index.append((c, n))
+                rows.append(pd.Series(linha, index=[f'w{j}' for j in range(1, len(linha) + 1)]))
+        por_peso = pd.DataFrame(
+            rows,
+            index=pd.MultiIndex.from_tuples(index, names=['camada', 'neurônio'])
+        )
+
+        print('Valores por amostra  (u: potencial | y: ativação | d: desejado | E: erro | delta)')
+        print(por_amostra.to_string(float_format=fmt))
+        print('\nGradientes dos pesos  dE/dw  (soma das amostras)')
+        print(por_peso.to_string(float_format=fmt, na_rep=''))
+        return gradients
+
 
 class Layer:
     def __init__(self, activation: callable, features_in: int = None, features_out: int = None,
