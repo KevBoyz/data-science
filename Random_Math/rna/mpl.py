@@ -19,20 +19,20 @@ def leaky_relu(u, alpha=0.01):
     return np.where(u > 0, u, alpha * u)
 
 
-def mean_squared_error(output: np.array, desirable: np.array):
-    return np.mean((output - desirable) ** 2)
+def quadratic_error(output: np.array, desirable: np.array):
+    return (output - desirable) ** 2
 
 
-def hard_derivate(x, func, appr=4, eps=1e-8):
-    right = lambda eps: (func(x + eps) - func(x)) / eps
-    left = lambda eps: (func(x) - func(x - eps)) / eps
+def hard_derivate(func, x, appr=4, eps=1e-8):
+    def right(eps): return (func(x + eps) - func(x)) / eps
+    def left(eps): return (func(x) - func(x - eps)) / eps
     aproximations = []
-    for i in range(appr):
-        alpha = (i % 3) + 1  # 1, 2, ..., appr
-        aproximations.append(right(alpha * eps))
-        aproximations.append(left(alpha * eps))
+    alphas = list(range(1, appr + 1))
+    for a in alphas:
+        aproximations.append(right(a * eps))
+        aproximations.append(left(a * eps))
     return sum(aproximations) / len(aproximations)
-    
+
 
 class MLP:
     def __init__(self, layers: list, loss: callable):
@@ -44,27 +44,42 @@ class MLP:
         for layer in self.layers:
             result = layer.foward(input)
             foward_results.append(result)
-            input = result['activation']
+            input = result['activations']
         return foward_results
 
     def calulate_loss(self, output, desireble):
         return self.loss(output, desireble)
 
-    def calculate_deltas(self):
+    def calculate_deltas(self, input, desirable):
+        foward_results = self.foward(input)
         deltas = []
+        # fixar desirable e chamar passando somente x
+        loss_fixed = lambda out: self.loss(out, desirable)
         exit_delta = hard_derivate(
-            self.layers[-1].weights,
-            self.layers[-1].activation
-            ) * hard_derivate(
-            self.layers
+            loss_fixed,
+            foward_results[-1]['activations']
+        ) * hard_derivate(
+                self.layers[-1].activation,
+                foward_results[-1]['potencials']
             )
-        for layer in self.layers[0:]:
-            ...
+        deltas.append(exit_delta)
+        for i, layer in enumerate(reversed(self.layers[:-1])):
+            back_layer_i = -(i+1)
+            actual_layer_i = back_layer_i - 1
+            deltas.append(
+                (self.layers[back_layer_i].weights.T @ deltas[-1]) *
+                hard_derivate(layer.activation, foward_results[actual_layer_i]['potencials'])
+            )
+        return deltas
+
+    def calculate_gradients(self, deltas):
+        gradients = []
+
 
 
 class Layer:
-    def __init__(self, activation:callable, features_in:int=None, features_out:int=None,
-                 weights:np.array=None, bias:np.array=None):
+    def __init__(self, activation: callable, features_in: int = None, features_out: int = None,
+                 weights: np.array = None, bias: np.array = None):
         self.features_in = features_in
         self.features_out = features_out
         self.weights = weights
@@ -77,13 +92,13 @@ class Layer:
             if not self.features_in or not self.features_out:
                 raise Exception('you may pass features_in and features_in')
             self.bias = np.random.randn(features_out, 1)
-        
+
         self.activation = activation
 
     def foward(self, input):
         potencial = self.weights @ input + self.bias
         activation = self.activation(potencial)
-        return {'potencial':potencial, 'activation':activation}
+        return {'potencials': potencial, 'activations': activation}
 
 
 # features x amostras
@@ -93,7 +108,7 @@ Y = np.array([[0, 1, 1, 0]])
 
 W1 = np.array([[0.2, -0.4],
                [0.7,  0.1]])
-b1 = np.array([[ 0.1],
+b1 = np.array([[0.1],
                [-0.3]])
 
 W2 = np.array([[0.5, -0.6]])
@@ -101,10 +116,12 @@ b2 = np.array([[0.2]])
 
 mlp = MLP(
     [
-        Layer(activation=sigmoid, features_in=2, features_out=2, weights=W1, bias=b1),
-        Layer(activation=sigmoid, features_in=2, features_out=1, weights=W2, bias=b2),
+        Layer(activation=sigmoid, features_in=2,
+              features_out=2, weights=W1, bias=b1),
+        Layer(activation=sigmoid, features_in=2,
+              features_out=1, weights=W2, bias=b2),
     ],
-    loss=mean_squared_error
+    loss=quadratic_error
 )
 
-print(mlp.calulate_loss(mlp.foward(X)[-1]['activation'], Y))
+print(mlp.calculate_deltas(X, Y))
