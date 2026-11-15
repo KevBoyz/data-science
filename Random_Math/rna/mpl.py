@@ -1,5 +1,5 @@
 import numpy as np
-import pandas as pd
+import matplotlib.pyplot as plt
 
 np.random.seed(123)
 
@@ -24,21 +24,20 @@ def leaky_relu(u, alpha=0.01):
 
 # Funções de perda
 
-def quadratic_error(output: np.array, desirable: np.array):
-    return (output - desirable) ** 2
+def quadratic_error(output: np.array, desirable: np.array, n:int=1, report:bool=False):
+    if report:
+        loss = 0
+        for o, d in zip(output.flatten(), desirable.flatten()):
+            loss += ((o - d) ** 2) / n
+        return loss / output.shape[1]
+    else:
+        return ((output - desirable) ** 2) / n
+ 
 
-
-# Otimizadores
-
-def batch_gd():
-    ...
-
-
-
-
-def hard_derivate(func, x, appr=4, eps=1e-8):
-    def right(eps): return (func(x + eps) - func(x)) / eps
-    def left(eps): return (func(x) - func(x - eps)) / eps
+def hard_derivate(func, x, *args, appr=4, eps=1e-8, **kwargs):
+    f = lambda out: func(out, *args, **kwargs)
+    right = lambda eps: (f(x + eps) - f(x)) / eps
+    left = lambda eps: (f(x) - f(x - eps)) / eps
     aproximations = []
     alphas = list(range(1, appr + 1))
     for a in alphas:
@@ -47,12 +46,13 @@ def hard_derivate(func, x, appr=4, eps=1e-8):
     return sum(aproximations) / len(aproximations)
 
 
-class MLP:
+class MLP:  # SGD
     def __init__(self, layers: list, loss: callable, eta=0.1):
         self.layers = layers
         self.loss = loss
+        self.eta = eta
 
-    def foward(self, input: np.array):
+    def predict(self, input: np.array):
         foward_results = []
         for layer in self.layers:
             result = layer.foward(input)
@@ -60,20 +60,25 @@ class MLP:
             input = result['activations']
         return foward_results
 
-    def calulate_loss(self, output, desireble):
-        return self.loss(output, desireble)
+    def get_out(self, input):
+        pred = self.predict(input)
+        return pred[-1]['activations']
 
+    def report(self, input, desireble):
+        return self.loss(self.get_out(input), desireble, report=True)
 
-    def calculate_deltas(self, foward_results, desirable):
+    def __calculate_deltas(self, foward_results, desirable):
+        # dimensões da matriz δi(output,input)
+        # ou seja δi(neuronio, amostra)
         deltas = []
         # fixar desirable e chamar passando somente x
-        loss_fixed = lambda out: self.loss(out, desirable)
         exit_delta = hard_derivate(
-            loss_fixed,
-            foward_results[-1]['activations']
+            self.loss,
+            foward_results[-1]['activations'],
+            desirable=desirable
         ) * hard_derivate(
                 self.layers[-1].activation,
-                foward_results[-1]['potencials']
+                foward_results[-1]['potencials'],
             )
         deltas.append(exit_delta)
         for i, layer in enumerate(reversed(self.layers[:-1])):
@@ -85,79 +90,49 @@ class MLP:
             )
         return list(reversed(deltas))
 
-    def calculate_gradients(self, input, foward_results, deltas):
-        gradients = []
-        gradients.append(
-            deltas[0] @ input.T
-        )
-        for i, layer in enumerate(self.layers[0:]):
-            try:  # Pular o primeiro delta já usado
-                gradients.append(
-                    deltas[i+1] @ foward_results[i]['activations'].T
-                )
-            except IndexError:
-                pass
+    def __calculate_gradients(self, input, foward_results, deltas):
+        weight_gradients = []
+        weight_gradients.append(deltas[0] @ input.T)
+        
+        for i in range(1, len(self.layers)):
+            weight_gradients.append( # δ @ yᵀ = Σₙ δₙ · yₙᵀ
+                (deltas[i] @ foward_results[i-1]['activations'].T)
+                / input.shape[1]
+            ) 
+        bias_gradients = [np.sum(d, axis=1, keepdims=True) for d in deltas]
+        return (weight_gradients, bias_gradients)
+
+    def get_gradients(self, input, desirable):
+        foward_results = self.predict(input)
+        deltas = self.__calculate_deltas(foward_results, desirable)
+        gradients = self.__calculate_gradients(input, foward_results, deltas)
         return gradients
 
-    def backprogapation(self, input, desirable):
-        foward_results = self.foward(input)
-        deltas = self.calculate_deltas(foward_results, desirable)
-        gradients = self.calculate_gradients(input, foward_results, deltas)
-
-        fmt = '{:.6f}'.format
-        amostras = [str(tuple(int(v) for v in x)) for x in input.T]
-
-        # tabela 1: valores de cada neurônio em cada amostra (colunas = amostras)
-        index, rows = [], []
-        for c, (result, delta) in enumerate(zip(foward_results, deltas), start=1):
-            valores = [('u', result['potencials']), ('y', result['activations'])]
-            if c == len(self.layers):
-                valores += [('d', desirable),
-                            ('E', self.loss(result['activations'], desirable))]
-            valores.append(('delta', delta))
-            for nome, matriz in valores:
-                for n, linha in enumerate(matriz, start=1):
-                    index.append((c, nome, n))
-                    rows.append(linha)
-        por_amostra = pd.DataFrame(
-            rows,
-            index=pd.MultiIndex.from_tuples(index, names=['camada', 'valor', 'neurônio']),
-            columns=amostras
-        )
-
-        # tabela 2: gradiente de cada peso (linha = neurônio, coluna = entrada)
-        index, rows = [], []
-        for c, grad in enumerate(gradients, start=1):
-            for n, linha in enumerate(grad, start=1):
-                index.append((c, n))
-                rows.append(pd.Series(linha, index=[f'w{j}' for j in range(1, len(linha) + 1)]))
-        por_peso = pd.DataFrame(
-            rows,
-            index=pd.MultiIndex.from_tuples(index, names=['camada', 'neurônio'])
-        )
-
-        print('Valores por amostra  (u: potencial | y: ativação | d: desejado | E: erro | delta)')
-        print(por_amostra.to_string(float_format=fmt))
-        print('\nGradientes dos pesos  dE/dw  (soma das amostras)')
-        print(por_peso.to_string(float_format=fmt, na_rep=''))
-        return gradients
+    def update_layers(self, input, desirable):
+        gradients = self.get_gradients(input, desirable)
+        wg = gradients[0]
+        bg = gradients[1]
+        for i, layer in enumerate(self.layers):
+            layer.weights -= self.eta * wg[i]
+            layer.bias -= self.eta * bg[i]
 
 
 class Layer:
-    def __init__(self, activation: callable, features_in: int = None, features_out: int = None,
+    def __init__(self, activation: callable, shape:list=None,
                  weights: np.array = None, bias: np.array = None):
-        self.features_in = features_in
-        self.features_out = features_out
+        if shape:
+            self.features_in = shape[0]
+            self.features_out = shape[1]
         self.weights = weights
         self.bias = bias
         if not self.weights.size:
             if not self.features_in or not self.features_out:
                 raise Exception('you may pass features_in and features_in')
-            self.weights = np.random.randn(features_out, features_in)
+            self.weights = np.random.randn(self.features_out, self.features_in)
         if not self.bias.size:
             if not self.features_in or not self.features_out:
                 raise Exception('you may pass features_in and features_in')
-            self.bias = np.random.randn(features_out, 1)
+            self.bias = np.random.randn(self.features_out, 1)
 
         self.activation = activation
 
@@ -172,22 +147,28 @@ X = np.array([[0, 0, 1, 1],
               [0, 1, 0, 1]])
 Y = np.array([[0, 1, 1, 0]])
 
-W1 = np.array([[0.2, -0.4],
-               [0.7,  0.1]])
-b1 = np.array([[0.1],
-               [-0.3]])
+W1 = np.array([[0., -0.],
+               [0.,  0.]])
+b1 = np.array([[0.],
+               [-0.]])
 
-W2 = np.array([[0.5, -0.6]])
+W2 = np.array([[0., 0.]])
 b2 = np.array([[0.2]])
 
-mlp = MLP(
+model = MLP(
     [
-        Layer(activation=sigmoid, features_in=2,
-              features_out=2, weights=W1, bias=b1),
-        Layer(activation=sigmoid, features_in=2,
-              features_out=1, weights=W2, bias=b2),
+        Layer(activation=sigmoid,
+                weights=W1, bias=b1),
+        Layer(activation=sigmoid,
+                weights=W2, bias=b2),
     ],
-    loss=quadratic_error
+    loss=quadratic_error,
+    eta=0.1
 )
 
-mlp.backprogapation(X, Y)
+losses = []
+for i in range(100):
+    losses.append(model.report(X, Y))
+    model.update_layers(X,Y)
+plt.plot(list(range(len(losses))), losses)
+plt.show()
