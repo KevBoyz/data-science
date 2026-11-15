@@ -46,13 +46,17 @@ def hard_derivate(func, x, *args, appr=4, eps=1e-8, **kwargs):
     return sum(aproximations) / len(aproximations)
 
 
-class MLP:  # SGD
-    def __init__(self, layers: list, loss: callable, eta=0.1):
+class MLP:  # BGD
+    def __init__(self, layers: list, loss: callable, X: np.array, Y: np.array, eta=0.1):
         self.layers = layers
         self.loss = loss
+        self.X = X  # features x amostras
+        self.Y = Y  # saídas x amostras
         self.eta = eta
 
-    def predict(self, input: np.array):
+    def predict(self, input: np.array = None):
+        # sem input usa self.X; passar input só para inferir em dados novos
+        input = self.X if input is None else input
         foward_results = []
         for layer in self.layers:
             result = layer.foward(input)
@@ -60,22 +64,21 @@ class MLP:  # SGD
             input = result['activations']
         return foward_results
 
-    def get_out(self, input):
+    def get_out(self, input: np.array = None):
         pred = self.predict(input)
         return pred[-1]['activations']
 
-    def report(self, input, desireble):
-        return self.loss(self.get_out(input), desireble, report=True)
+    def report(self):
+        return self.loss(self.get_out(), self.Y, report=True)
 
-    def __calculate_deltas(self, foward_results, desirable):
+    def __calculate_deltas(self, foward_results):
         # dimensões da matriz δi(output,input)
         # ou seja δi(neuronio, amostra)
         deltas = []
-        # fixar desirable e chamar passando somente x
         exit_delta = hard_derivate(
             self.loss,
             foward_results[-1]['activations'],
-            desirable=desirable
+            desirable=self.Y
         ) * hard_derivate(
                 self.layers[-1].activation,
                 foward_results[-1]['potencials'],
@@ -90,26 +93,26 @@ class MLP:  # SGD
             )
         return list(reversed(deltas))
 
-    def __calculate_gradients(self, input, foward_results, deltas):
+    def __calculate_gradients(self, foward_results, deltas):
         weight_gradients = []
-        weight_gradients.append(deltas[0] @ input.T)
-        
+        weight_gradients.append(deltas[0] @ self.X.T)
+
         for i in range(1, len(self.layers)):
             weight_gradients.append( # δ @ yᵀ = Σₙ δₙ · yₙᵀ
                 (deltas[i] @ foward_results[i-1]['activations'].T)
-                / input.shape[1]
-            ) 
+                / self.X.shape[1]
+            )
         bias_gradients = [np.sum(d, axis=1, keepdims=True) for d in deltas]
         return (weight_gradients, bias_gradients)
 
-    def get_gradients(self, input, desirable):
-        foward_results = self.predict(input)
-        deltas = self.__calculate_deltas(foward_results, desirable)
-        gradients = self.__calculate_gradients(input, foward_results, deltas)
+    def __get_gradients(self):
+        foward_results = self.predict()
+        deltas = self.__calculate_deltas(foward_results)
+        gradients = self.__calculate_gradients(foward_results, deltas)
         return gradients
 
-    def update_layers(self, input, desirable):
-        gradients = self.get_gradients(input, desirable)
+    def update_layers(self):
+        gradients = self.__get_gradients()
         wg = gradients[0]
         bg = gradients[1]
         for i, layer in enumerate(self.layers):
@@ -142,17 +145,17 @@ class Layer:
         return {'potencials': potencial, 'activations': activation}
 
 
-# features x amostras
 X = np.array([[0, 0, 1, 1],
               [0, 1, 0, 1]])
+
 Y = np.array([[0, 1, 1, 0]])
 
-W1 = np.array([[0., -0.],
-               [0.,  0.]])
-b1 = np.array([[0.],
-               [-0.]])
+W1 = np.array([[0.9, -0.9],
+               [0.7,  0.8]])
+b1 = np.array([[0.1],
+               [-0.4]])
 
-W2 = np.array([[0., 0.]])
+W2 = np.array([[0.5, 0.9]])
 b2 = np.array([[0.2]])
 
 model = MLP(
@@ -163,12 +166,24 @@ model = MLP(
                 weights=W2, bias=b2),
     ],
     loss=quadratic_error,
+    X=X,
+    Y=Y,
     eta=0.1
 )
 
 losses = []
-for i in range(100):
-    losses.append(model.report(X, Y))
-    model.update_layers(X,Y)
-plt.plot(list(range(len(losses))), losses)
+dif = float("inf")
+
+while dif >= 1e-5:
+    loss = model.report()
+    losses.append(loss)
+
+    model.update_layers()
+
+    if len(losses) > 1:
+        dif = abs(losses[-2] - losses[-1])
+
+plt.plot(range(len(losses)), losses)
+plt.xlabel("Épocas")
+plt.ylabel("Loss")
 plt.show()
